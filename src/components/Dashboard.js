@@ -67,7 +67,14 @@ export default function Dashboard() {
             <ListItem key={idx} divider>
               <ListItemText primary={file.name} secondary={file.uploadedAt?.toDate?.().toLocaleString?.() || file.error || ''} />
               {file.url ? (
-                <Button variant="contained" onClick={() => forceDownload(file.url, file.name)}>Download</Button>
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Button variant="contained">Download</Button>
+                </a>
               ) : (
                 <Typography color="error" variant="body2">{file.error || 'Unavailable'}</Typography>
               )}
