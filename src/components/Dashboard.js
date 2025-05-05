@@ -6,13 +6,23 @@ import { useAuth } from './AuthProvider';
 import { Box, Typography, List, ListItem, ListItemText, Button, CircularProgress, Container } from '@mui/material';
 import LogoutButton from './LogoutButton';
 
-function downloadUrl(url, filename) {
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', filename || 'download');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+function forceDownload(url, filename) {
+  fetch(url)
+    .then(response => response.blob())
+    .then(blob => {
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename || 'download');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    })
+    .catch(() => {
+      // fallback: open in new tab if download fails
+      window.open(url, '_blank');
+    });
 }
 
 export default function Dashboard() {
@@ -57,18 +67,7 @@ export default function Dashboard() {
             <ListItem key={idx} divider>
               <ListItemText primary={file.name} secondary={file.uploadedAt?.toDate?.().toLocaleString?.() || file.error || ''} />
               {file.url ? (
-                file.type === 'link' ? (
-                  <Button
-                    variant="contained"
-                    onClick={() => downloadUrl(file.url, file.name)}
-                  >
-                    Download
-                  </Button>
-                ) : (
-                  <Button href={file.url} target="_blank" rel="noopener" variant="contained" download={file.name}>
-                    Download
-                  </Button>
-                )
+                <Button variant="contained" onClick={() => forceDownload(file.url, file.name)}>Download</Button>
               ) : (
                 <Typography color="error" variant="body2">{file.error || 'Unavailable'}</Typography>
               )}
