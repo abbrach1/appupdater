@@ -18,8 +18,18 @@ export default function Dashboard() {
       const querySnapshot = await getDocs(q);
       const fileData = await Promise.all(querySnapshot.docs.map(async (doc) => {
         const data = doc.data();
-        const url = await getDownloadURL(ref(storage, data.storagePath));
-        return { ...data, url };
+        if (data.type === 'file' && data.storagePath) {
+          try {
+            const url = await getDownloadURL(ref(storage, data.storagePath));
+            return { ...data, url };
+          } catch (e) {
+            return { ...data, url: '', error: 'File not found in storage.' };
+          }
+        } else if (data.type === 'link' && data.url) {
+          return { ...data, url: data.url };
+        } else {
+          return { ...data, url: '', error: 'Unknown file type.' };
+        }
       }));
       setFiles(fileData);
       setLoading(false);
@@ -36,8 +46,14 @@ export default function Dashboard() {
           {files.length === 0 && <Typography>No files uploaded for you yet.</Typography>}
           {files.map((file, idx) => (
             <ListItem key={idx} divider>
-              <ListItemText primary={file.name} secondary={file.uploadedAt?.toDate?.().toLocaleString?.() || ''} />
-              <Button href={file.url} target="_blank" rel="noopener" variant="contained">Download</Button>
+              <ListItemText primary={file.name} secondary={file.uploadedAt?.toDate?.().toLocaleString?.() || file.error || ''} />
+              {file.url ? (
+                <Button href={file.url} target="_blank" rel="noopener" variant="contained">
+                  {file.type === 'link' ? 'Open Link' : 'Download'}
+                </Button>
+              ) : (
+                <Typography color="error" variant="body2">{file.error || 'Unavailable'}</Typography>
+              )}
             </ListItem>
           ))}
         </List>
