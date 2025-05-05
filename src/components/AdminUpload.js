@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../firebase';
 import { collection, addDoc, Timestamp, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
-import { Box, Button, Container, Typography, Alert, CircularProgress, MenuItem, Select, InputLabel, FormControl, ToggleButton, ToggleButtonGroup, TextField, Tabs, Tab, Paper } from '@mui/material';
+import { ref, uploadBytesResumable } from 'firebase/storage';
+import { Box, Button, Container, Typography, Alert, CircularProgress, MenuItem, Select, InputLabel, FormControl, ToggleButton, ToggleButtonGroup, TextField, Tabs, Tab, Paper, LinearProgress } from '@mui/material';
 import LogoutButton from './LogoutButton';
 import AdminUserEditor from './AdminUserEditor';
 
@@ -14,6 +14,7 @@ export default function AdminUpload() {
   const [userId, setUserId] = useState('');
   const [userList, setUserList] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [fetchingUsers, setFetchingUsers] = useState(true);
@@ -37,7 +38,7 @@ export default function AdminUpload() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    setError(''); setSuccess('');
+    setError(''); setSuccess(''); setProgress(0);
     if (!userId) {
       setError('Please choose a user.');
       return;
@@ -59,7 +60,17 @@ export default function AdminUpload() {
       if (uploadType === 'file') {
         const storagePath = `user_files/${userId}/${file.name}`;
         const storageRef = ref(storage, storagePath);
-        await uploadBytes(storageRef, file);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+        await new Promise((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              setProgress(pct);
+            },
+            (err) => reject(err),
+            () => resolve()
+          );
+        });
         fileRecord = { ...fileRecord, name: file.name, storagePath, type: 'file' };
       } else if (uploadType === 'link') {
         fileRecord = { ...fileRecord, name: link, url: link, type: 'link' };
@@ -69,8 +80,10 @@ export default function AdminUpload() {
       setFile(null);
       setLink('');
       setUserId('');
+      setProgress(0);
     } catch (err) {
       setError('Upload failed: ' + err.message);
+      setProgress(0);
     }
     setLoading(false);
   };
@@ -109,10 +122,18 @@ export default function AdminUpload() {
               <ToggleButton value="link">Link</ToggleButton>
             </ToggleButtonGroup>
             {uploadType === 'file' && (
-              <Button variant="contained" component="label" fullWidth sx={{ mt: 2 }}>
-                {file ? file.name : 'Select File'}
-                <input type="file" hidden onChange={e => setFile(e.target.files[0])} />
-              </Button>
+              <>
+                <Button variant="contained" component="label" fullWidth sx={{ mt: 2 }}>
+                  {file ? file.name : 'Select File'}
+                  <input type="file" hidden onChange={e => setFile(e.target.files[0])} />
+                </Button>
+                {progress > 0 && (
+                  <Box sx={{ width: '100%', mt: 2 }}>
+                    <LinearProgress variant="determinate" value={progress} />
+                    <Typography variant="body2" align="center" sx={{ mt: 1 }}>{progress}%</Typography>
+                  </Box>
+                )}
+              </>
             )}
             {uploadType === 'link' && (
               <TextField
