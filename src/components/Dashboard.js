@@ -3,7 +3,7 @@ import { db, storage } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { useAuth } from './AuthProvider';
-import { Box, Typography, List, ListItem, ListItemText, Button, CircularProgress, Container, Tooltip } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemText, Button, CircularProgress, Container, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import LogoutButton from './LogoutButton';
 
 const problematicTypes = ['apk', 'exe', 'zip', 'rar', 'bin', 'tar', 'gz', 'dmg'];
@@ -12,29 +12,16 @@ function getFileExtension(filename = '') {
   return filename.split('.').pop().toLowerCase();
 }
 
-function forceDownload(url, filename) {
-  fetch(url)
-    .then(response => response.blob())
-    .then(blob => {
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', filename || 'download');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    })
-    .catch(() => {
-      // fallback: open in new tab if download fails
-      window.open(url, '_blank');
-    });
+function isAndroid() {
+  return /Android/i.test(navigator.userAgent);
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAndroidDialog, setShowAndroidDialog] = useState(false);
+  const [androidDownloadUrl, setAndroidDownloadUrl] = useState('');
 
   useEffect(() => {
     async function fetchFiles() {
@@ -70,6 +57,30 @@ export default function Dashboard() {
     return '';
   };
 
+  const handleDownload = (url, name) => {
+    if (isAndroid()) {
+      setAndroidDownloadUrl(url);
+      setShowAndroidDialog(true);
+    } else {
+      // Use forceDownload for desktop/other platforms
+      fetch(url)
+        .then(response => response.blob())
+        .then(blob => {
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.setAttribute('download', name || 'download');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        })
+        .catch(() => {
+          window.open(url, '_blank');
+        });
+    }
+  };
+
   return (
     <Container maxWidth="sm" sx={{ mt: 4 }}>
       <LogoutButton />
@@ -83,18 +94,10 @@ export default function Dashboard() {
               <ListItem key={idx} divider>
                 <ListItemText primary={file.name} secondary={file.uploadedAt?.toDate?.().toLocaleString?.() || file.error || ''} />
                 {file.url ? (
-                  <Tooltip title={tooltip} arrow disableHoverListener={!tooltip}>
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <Button variant="contained" onClick={(e) => {
-                        e.preventDefault();
-                        forceDownload(file.url, file.name);
-                      }}>Download</Button>
-                    </a>
+                  <Tooltip title={tooltip || (isAndroid() ? "If the file doesn't download, long-press and choose 'Download link'." : "") } arrow>
+                    <Button variant="contained" onClick={() => handleDownload(file.url, file.name)}>
+                      Download
+                    </Button>
                   </Tooltip>
                 ) : (
                   <Typography color="error" variant="body2">{file.error || 'Unavailable'}</Typography>
@@ -104,6 +107,27 @@ export default function Dashboard() {
           })}
         </List>
       )}
+      <Dialog open={showAndroidDialog} onClose={() => setShowAndroidDialog(false)}>
+        <DialogTitle>Download on Android</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Android browsers may not download certain file types automatically. To save this file:
+            <ol>
+              <li>Tap the button below to open the file in a new tab.</li>
+              <li>Long-press the file in the new tab and select <b>Download link</b> or <b>Save link as...</b></li>
+              <li>Choose your desired location to save the file.</li>
+            </ol>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAndroidDialog(false)}>Cancel</Button>
+          <a href={androidDownloadUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+            <Button variant="contained" onClick={() => setShowAndroidDialog(false)}>
+              Open File in New Tab
+            </Button>
+          </a>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
